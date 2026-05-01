@@ -20,6 +20,28 @@ class LdaNormalBayesClassifier(OCRClassifier):
         super().__init__(ocr_char_size)
         self.lda = None
         self.classifier = None
+    
+    def preprocess(self, img):
+        """
+        Umbralize, adaptative threshold, contours, bounding Rect, etc. to extract features from the image.
+        """
+        # Adaptative thresholding
+        img = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+
+
+        # Contours
+        contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # bounding Rect
+        if contours:
+            x, y, w, h = cv2.boundingRect(max(contours, key=cv2.contourArea))
+            img = img[y:y+h, x:x+w]
+        
+        img = cv2.resize(img, (25,25))
+
+        return img.flatten() # Return the feature vector (e.g., pixel values, HOG features, etc.) as a 1D array
+
+
 
     def train(self, images_dict):
         """.
@@ -32,10 +54,32 @@ class LdaNormalBayesClassifier(OCRClassifier):
 
         # Take training images and do feature extraction
         
-        X = ... # Feature vectors by rows
-        y = ... # Labels for each row in X 
+        X = [] # Feature vectors by rows
+        y = [] # Labels for each row in X 
+
+        for char, images in images_dict.items():
+            for img in images:
+                features = self.preprocess(img) # Extract features from the image (e.g., pixel values, HOG, etc.)
+                X.append(features)
+                y.append(char)
 
         # Perform LDA training
+        C = np.array(X)
+        E = np.array(y)
+        self.lda = LinearDiscriminantAnalysis()
+        self.lda.fit(C, y)
+        CR = self.lda.transform(C)
+
+
+
+        # Train classifier CR & E
+        # First, we try with the normalBayesClassifier
+
+        NormalBayesClassifier = cv2.ml.NormalBayesClassifier_create()
+        NormalBayesClassifier.train(CR, cv2.ml.ROW_SAMPLE, E)
+
+        #continuar...
+        
 
         # Perform Classifier training
 
