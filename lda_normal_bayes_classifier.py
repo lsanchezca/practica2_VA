@@ -88,8 +88,11 @@ class LdaNormalBayesClassifier(OCRClassifier):
         :img Image to classify
         
         """
-        
-        y = ... # Obtain the estimated label by the LDA + Bayes classifier
+
+        features = self.preprocess(img) # Extract features from the image (e.g., pixel values, HOG, etc.)
+        features = np.array(features).astype(np.float32)
+        CR = self.lda.transform(features)
+        _,y = self.classifier.predict(CR) # Obtain the estimated label by the LDA + Bayes classifier
 
         return int(y)
 
