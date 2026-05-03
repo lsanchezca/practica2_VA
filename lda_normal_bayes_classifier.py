@@ -64,8 +64,8 @@ class LdaNormalBayesClassifier(OCRClassifier):
                 y.append(char)
 
         # Perform LDA training
-        C = np.array(X)
-        E = np.array(y)
+        C = np.array(X)  # np.float32????? ver luego
+        E = np.array(y).astype(np.int32) # tipo openCV para etiquetas 
         self.lda = LinearDiscriminantAnalysis()
         self.lda.fit(C, y)
         CR = self.lda.transform(C)
@@ -75,15 +75,11 @@ class LdaNormalBayesClassifier(OCRClassifier):
         # Train classifier CR & E
         # First, we try with the normalBayesClassifier
 
-        NormalBayesClassifier = cv2.ml.NormalBayesClassifier_create()
-        NormalBayesClassifier.train(CR, cv2.ml.ROW_SAMPLE, E)
+        self.classifier = cv2.ml.NormalBayesClassifier_create()
+        self.classifier.train(CR, cv2.ml.ROW_SAMPLE, E)
 
-        #continuar...
-        
 
-        # Perform Classifier training
-
-        return samples, labels
+        return C, E 
 
     def predict(self, img):
         """.
