@@ -73,7 +73,6 @@ def load_training_images_dict(train_path, target_size=(25, 25)):
     images_dict = {}
     
     # Cargar dígitos (0-9)
-    print("Cargando dígitos...")
     for digit in digits:
         digit_path = os.path.join(train_path, digit)
         images = load_char_images(digit_path, target_size)
@@ -82,7 +81,6 @@ def load_training_images_dict(train_path, target_size=(25, 25)):
             #print(f"  {digit}: {len(images)} imágenes")
     
     # Cargar mayúsculas (A-Z)
-    print("Cargando mayúsculas...")
     may_path = os.path.join(train_path, 'may')
     for letter in ascii_uppercase:
         letter_path = os.path.join(may_path, letter)
@@ -92,7 +90,6 @@ def load_training_images_dict(train_path, target_size=(25, 25)):
             #print(f"  {letter}: {len(images)} imágenes")
     
     # Cargar minúsculas (a-z)
-    print("Cargando minúsculas...")
     min_path = os.path.join(train_path, 'min')
     for letter in ascii_lowercase:
         letter_path = os.path.join(min_path, letter)

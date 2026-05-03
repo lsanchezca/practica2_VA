@@ -5,11 +5,15 @@
 
 import argparse
 
-import panel_det
+# import panel_det
 import matplotlib.pyplot as plt
 import cv2
 import numpy as np
 import sklearn
+from lda_normal_bayes_classifier import LdaNormalBayesClassifier
+from string import digits, ascii_uppercase, ascii_lowercase
+from ocr_classifier import OCRClassifier
+import os 
 
 def plot_confusion_matrix(cm, title='Confusion matrix', cmap=plt.cm.get_cmap('Blues')):
     '''
@@ -33,6 +37,101 @@ def plot_confusion_matrix(cm, title='Confusion matrix', cmap=plt.cm.get_cmap('Bl
             ax.annotate(str(cm[y,x]), xy=(y, x),
                         horizontalalignment='center',
                         verticalalignment='center')
+            
+
+def load_char_images(char_path, target_size=(25, 25)):
+    """
+    Carga todas las imágenes de una carpeta de carácter.
+    
+    Args:
+        char_path: ruta a la carpeta del carácter
+        target_size: tamaño al que redimensionar las imágenes (ancho, alto)
+    
+    Returns:
+        list: lista de imágenes redimensionadas en escala de grises
+    """
+    images = []
+    
+    if not os.path.exists(char_path):
+        return images
+    
+    for img_file in os.listdir(char_path):
+        if img_file.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tif')):
+            img_path = os.path.join(char_path, img_file)
+            try:
+                # Leer la imagen en escala de grises
+                img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+                if img is not None:
+                    # Redimensionar al tamaño objetivo
+                    img = cv2.resize(img, target_size)
+                    images.append(img)
+            except Exception as e:
+                print(f"Error al cargar {img_path}: {e}")
+    
+    return images    
+
+def load_training_images_dict(train_path, target_size=(25, 25)):
+    """
+    Carga todas las imágenes de train_ocr en un diccionario.
+    
+    La estructura esperada es:
+    - train_ocr/
+        - 0/ (dígitos)
+        - 1/
+        - ...
+        - 9/
+        - may/ (mayúsculas)
+            - A/
+            - B/
+            - ...
+            - Z/
+        - min/ (minúsculas)
+            - a/
+            - b/
+            - ...
+            - z/
+    
+    Args:
+        train_path: ruta a la carpeta train_ocr
+        target_size: tamaño al que redimensionar las imágenes (ancho, alto)
+    
+    Returns:
+        dict: {carácter: [lista de imágenes]}
+    """
+    images_dict = {}
+    
+    # Cargar dígitos (0-9)
+    for digit in digits:
+        digit_path = os.path.join(train_path, digit)
+        images = load_char_images(digit_path, target_size)
+        if images:
+            images_dict[digit] = images
+            #print(f"  {digit}: {len(images)} imágenes")
+    
+    # Cargar mayúsculas (A-Z)
+    may_path = os.path.join(train_path, 'may')
+    for letter in ascii_uppercase:
+        letter_path = os.path.join(may_path, letter)
+        images = load_char_images(letter_path, target_size)
+        if images:
+            images_dict[letter] = images
+            #print(f"  {letter}: {len(images)} imágenes")
+    
+    # Cargar minúsculas (a-z)
+    min_path = os.path.join(train_path, 'min')
+    for letter in ascii_lowercase:
+        letter_path = os.path.join(min_path, letter)
+        images = load_char_images(letter_path, target_size)
+        if images:
+            images_dict[letter] = images
+            #print(f"  {letter}: {len(images)} imágenes")
+    
+    return images_dict
+
+
+
+
+
 
 if __name__ == "__main__":
 
@@ -43,7 +142,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--train_path', default="./train_ocr", help='Select the training data dir')
     parser.add_argument(
-        '--validation_path', default="./validation_ocr", help='Select the validation data dir')
+        '--validation_path', default="./test_ocr", help='Select the validation data dir')
 
     args = parser.parse_args()
 
@@ -51,17 +150,24 @@ if __name__ == "__main__":
     # 1) Cargar las imágenes de entrenamiento y sus etiquetas. 
     # También habrá que extraer los vectores de características asociados (en la parte básica 
     # umbralizar imágenes, pasar findContours y luego redimensionar)
+
+    train_images_dict = load_training_images_dict(args.train_path)
+    I = LdaNormalBayesClassifier((25,25))
+
+
     
     # 2) Cargar datos de validación y sus etiquetas
     # También habrá que extraer los vectores de características asociados (en la parte básica 
     # umbralizar imágenes, pasar findContours y luego redimensionar)
-    gt_labels = ...
-
-
+    classifier = OCRClassifier((25,25))
+    val_images_dict = load_training_images_dict(args.validation_path) # Cargar imágenes de validación y etiquetas (ground trut)
+    gt_labels = classifier.get_labels_dict(val_images_dict) # Obtener etiquetas de validación a partir del diccionario de imágenes de validación
     # 3) Entrenar clasificador
+    I.train(train_images_dict)
+
 
     # 4) Ejecutar el clasificador sobre los datos de test
-    predicted_labels = ...
+    predicted_labels = I.predict_dict(val_images_dict) # Predecir etiquetas de validación con el clasificador entrenado
 
     # 5) Evaluar los resultados
     accuracy = sklearn.metrics.accuracy_score(gt_labels, predicted_labels)

@@ -9,7 +9,7 @@
 import cv2
 import numpy as np
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from .ocr_classifier import OCRClassifier
+from ocr_classifier import OCRClassifier
 
 class LdaNormalBayesClassifier(OCRClassifier):
     """
@@ -61,14 +61,14 @@ class LdaNormalBayesClassifier(OCRClassifier):
             for img in images:
                 features = self.preprocess(img) # Extract features from the image (e.g., pixel values, HOG, etc.)
                 X.append(features)
-                y.append(char)
+                y.append(self.char2label(char))
 
         # Perform LDA training
-        C = np.array(X)  # np.float32????? ver luego
+        C = np.array(X).astype(np.float32)  # Convertir a float32
         E = np.array(y).astype(np.int32) # tipo openCV para etiquetas 
         self.lda = LinearDiscriminantAnalysis()
-        self.lda.fit(C, y)
-        CR = self.lda.transform(C)
+        self.lda.fit(C, E)
+        CR = self.lda.transform(C).astype(np.float32)  # Convertir a float32 para OpenCV
 
 
 
@@ -90,11 +90,11 @@ class LdaNormalBayesClassifier(OCRClassifier):
         """
 
         features = self.preprocess(img) # Extract features from the image (e.g., pixel values, HOG, etc.)
-        features = np.array(features).astype(np.float32)
+        features = np.array([features], dtype=np.float32)
         CR = self.lda.transform(features)
         _,y = self.classifier.predict(CR) # Obtain the estimated label by the LDA + Bayes classifier
 
-        return int(y)
+        return int(y.item())
 
 
 
