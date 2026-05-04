@@ -13,6 +13,7 @@ import sklearn
 from lda_normal_bayes_classifier import LdaNormalBayesClassifier
 from string import digits, ascii_uppercase, ascii_lowercase
 from ocr_classifier import OCRClassifier
+from im_feature_PCA_KNN_classifier import PcaKnnClassifier
 import os 
 
 def plot_confusion_matrix(cm, title='Confusion matrix', cmap=plt.cm.get_cmap('Blues')):
@@ -151,9 +152,20 @@ if __name__ == "__main__":
     # También habrá que extraer los vectores de características asociados (en la parte básica 
     # umbralizar imágenes, pasar findContours y luego redimensionar)
 
-    train_images_dict = load_training_images_dict(args.train_path)
-    I = LdaNormalBayesClassifier((25,25))
+    print("1) LDA + Bayes con Gaussiana")
+    print("2) PCA + KNN")
+    print("0) Salir")
+    choice = None
 
+    choice = input("Introduce el número del clasificador a evaluar: ")
+
+    if choice == "1":
+        I = LdaNormalBayesClassifier((25,25))
+    elif choice == "2":
+        I = PcaKnnClassifier((25,25))
+    
+
+    train_images_dict = load_training_images_dict(args.train_path)
 
     
     # 2) Cargar datos de validación y sus etiquetas
