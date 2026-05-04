@@ -6,6 +6,8 @@
 import argparse
 
 # import panel_det
+import matplotlib
+matplotlib.use('Agg')  # Backend sin GUI, guarda archivos en lugar de mostrar
 import matplotlib.pyplot as plt
 import cv2
 import numpy as np
@@ -14,6 +16,7 @@ from lda_normal_bayes_classifier import LdaNormalBayesClassifier
 from string import digits, ascii_uppercase, ascii_lowercase
 from ocr_classifier import OCRClassifier
 from im_feature_PCA_KNN_classifier import PcaKnnClassifier
+from noreduction_knn_classifier import NRKnnClassifier
 import os 
 
 def plot_confusion_matrix(cm, title='Confusion matrix', cmap=plt.cm.get_cmap('Blues')):
@@ -154,7 +157,7 @@ if __name__ == "__main__":
 
     print("1) LDA + Bayes con Gaussiana")
     print("2) PCA + KNN")
-    print("0) Salir")
+    print("3) No Reduction + KNN")
     choice = None
 
     choice = input("Introduce el número del clasificador a evaluar: ")
@@ -163,6 +166,8 @@ if __name__ == "__main__":
         I = LdaNormalBayesClassifier((25,25))
     elif choice == "2":
         I = PcaKnnClassifier((25,25))
+    elif choice == "3":
+        I = NRKnnClassifier((25,25))
     
 
     train_images_dict = load_training_images_dict(args.train_path)
@@ -181,7 +186,26 @@ if __name__ == "__main__":
     # 4) Ejecutar el clasificador sobre los datos de test
     predicted_labels = I.predict_dict(val_images_dict) # Predecir etiquetas de validación con el clasificador entrenado
 
+
     # 5) Evaluar los resultados
     accuracy = sklearn.metrics.accuracy_score(gt_labels, predicted_labels)
     print("Accuracy = ", accuracy)
+
+    cm = sklearn.metrics.confusion_matrix(gt_labels, predicted_labels)
+    plt.figure(figsize=(10,10))
+    plot_confusion_matrix(cm)
+    plt.savefig(f'confusion_matrix_{choice}.png')  # Guardar la figura en lugar de mostrarla
+
+    # ROC curve
+    fpr, tpr, thresholds = sklearn.metrics.roc_curve(gt_labels, predicted_labels, pos_label=1)
+    plt.figure()
+    plt.plot(fpr, tpr, label='ROC curve')
+    plt.plot([0, 1], [0, 1], 'k--')  # Línea diagonal para referencia
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('ROC Curve')
+    plt.legend(loc='lower right')
+    plt.savefig(f'roc_curve_{choice}.png')  # Guardar la figura en lugar de mostrarla
+
+
 
