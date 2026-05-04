@@ -94,7 +94,7 @@ class LdaNormalBayesClassifier(OCRClassifier):
         CR = self.lda.transform(features)
         _,y = self.classifier.predict(CR) # Obtain the estimated label by the LDA + Bayes classifier
 
-        return int(y.item())
+        return int(y.item()) 
 
 
 
