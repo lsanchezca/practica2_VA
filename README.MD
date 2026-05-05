@@ -1,4 +1,3 @@
-
 # Ejercicio 1 y 2
 
 ## 3 clasificadores
@@ -15,3 +14,11 @@
 
 * figures\confusion_matrix_$.png¡
 * figures\roc_curve_$.png
+
+
+
+# Ejercicio 3 y 4
+
+commands : python main_panels_ocr.py --train_path ./train_ocr --test_path ./test_ocr_panels
+
+python evaluar_resultados_test_ocr_panels.py
