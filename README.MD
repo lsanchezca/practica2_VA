@@ -22,3 +22,9 @@
 commands : python main_panels_ocr.py --train_path ./train_ocr --test_path ./test_ocr_panels
 
 python evaluar_resultados_test_ocr_panels.py
+
+
+archivos generados:
+
+- resultado.txt
+- figures\Figure_1.png : distancia de Levenshtein
