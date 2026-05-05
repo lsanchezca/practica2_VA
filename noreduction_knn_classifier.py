@@ -31,8 +31,12 @@ class NRKnnClassifier(OCRClassifier):
             x, y, w, h = cv2.boundingRect(max(contours, key=cv2.contourArea))
             img = img[y:y+h, x:x+w]
         
-        img = hog(img, pixels_per_cell=(8,8), cells_per_block=(3,3), feature_vector=True) # Extract HOG features
-        return img
+        # img = hog(img, pixels_per_cell=(8,8), cells_per_block=(3,3), feature_vector=True) # Extract HOG features
+        # return img
+        img = cv2.resize(img, (25,25))
+
+        return img.flatten() # Return the feature vector (e.g., pixel values, HOG features, etc.) as a 1D array
+
 
 
     def train(self, images_dict):

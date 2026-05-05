@@ -18,6 +18,7 @@ from ocr_classifier import OCRClassifier
 from im_feature_PCA_KNN_classifier import PcaKnnClassifier
 from noreduction_knn_classifier import NRKnnClassifier
 import os 
+import time
 
 def plot_confusion_matrix(cm, title='Confusion matrix', cmap=plt.cm.get_cmap('Blues')):
     '''
@@ -179,33 +180,66 @@ if __name__ == "__main__":
     classifier = OCRClassifier((25,25))
     val_images_dict = load_training_images_dict(args.validation_path) # Cargar imágenes de validación y etiquetas (ground trut)
     gt_labels = classifier.get_labels_dict(val_images_dict) # Obtener etiquetas de validación a partir del diccionario de imágenes de validación
-    # 3) Entrenar clasificador
-    I.train(train_images_dict)
 
+    # 3) Entrenar clasificador
+    train_start = time.perf_counter()
+    C, E = I.train(train_images_dict)
+    train_time = time.perf_counter() - train_start
 
     # 4) Ejecutar el clasificador sobre los datos de test
-    predicted_labels = I.predict_dict(val_images_dict) # Predecir etiquetas de validación con el clasificador entrenado
+    predict_start = time.perf_counter()
+    predicted_labels = I.predict_dict(val_images_dict)
+    predict_time = time.perf_counter() - predict_start
 
-
-    # 5) Evaluar los resultados
+        # 5) Evaluar los resultados
     accuracy = sklearn.metrics.accuracy_score(gt_labels, predicted_labels)
-    print("Accuracy = ", accuracy)
+    precision_macro = sklearn.metrics.precision_score(gt_labels, predicted_labels, average='macro', zero_division=0)
+    recall_macro = sklearn.metrics.recall_score(gt_labels, predicted_labels, average='macro', zero_division=0)
+    f1_macro = sklearn.metrics.f1_score(gt_labels, predicted_labels, average='macro', zero_division=0)
+    balanced_acc = sklearn.metrics.balanced_accuracy_score(gt_labels, predicted_labels)
+
+    print("\n================= RESUMEN DEL CLASIFICADOR =================")
+    print(f"Clasificador evaluado: {choice}")
+    print(f"Accuracy: {accuracy * 100:.2f} %")
+    print(f"Precision macro: {precision_macro * 100:.2f} %")
+    print(f"Recall macro: {recall_macro * 100:.2f} %")
+    print(f"F1 macro: {f1_macro * 100:.2f} %")
+    print(f"Balanced accuracy: {balanced_acc * 100:.2f} %")
+    print(f"Tiempo de entrenamiento: {train_time:.4f} s")
+    print(f"Tiempo total de predicción: {predict_time:.4f} s")
+    print(f"Tiempo medio por muestra: {predict_time / max(len(predicted_labels), 1):.6f} s")
+
+    original_dim = C.shape[1]
+    if hasattr(I, 'pca') and I.pca is not None:
+        reduced_dim = I.pca.n_components_
+        compression = (1 - reduced_dim / original_dim) * 100
+        print(f"Dimensionalidad original: {original_dim}")
+        print(f"Dimensionalidad tras PCA: {reduced_dim}")
+        print(f"Compresión: {compression:.2f} %")
+    elif hasattr(I, 'lda') and I.lda is not None:
+        reduced_dim = I.lda.coef_.shape[0]
+        compression = (1 - reduced_dim / original_dim) * 100
+        print(f"Dimensionalidad original: {original_dim}")
+        print(f"Dimensionalidad tras LDA: {reduced_dim}")
+        print(f"Compresión: {compression:.2f} %")
+    else:
+        print(f"Dimensionalidad de entrada: {original_dim}")
+        print("Reducción de dimensionalidad: ninguna")
+
+    print("============================================================\n")
 
     cm = sklearn.metrics.confusion_matrix(gt_labels, predicted_labels)
     plt.figure(figsize=(10,10))
     plot_confusion_matrix(cm)
-    plt.savefig(f'confusion_matrix_{choice}.png')  # Guardar la figura en lugar de mostrarla
+    plt.savefig(f'confusion_matrix_{choice}.png')
 
     # ROC curve
     fpr, tpr, thresholds = sklearn.metrics.roc_curve(gt_labels, predicted_labels, pos_label=1)
     plt.figure()
     plt.plot(fpr, tpr, label='ROC curve')
-    plt.plot([0, 1], [0, 1], 'k--')  # Línea diagonal para referencia
+    plt.plot([0, 1], [0, 1], 'k--')
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.title('ROC Curve')
     plt.legend(loc='lower right')
-    plt.savefig(f'roc_curve_{choice}.png')  # Guardar la figura en lugar de mostrarla
-
-
-
+    plt.savefig(f'roc_curve_{choice}.png')
