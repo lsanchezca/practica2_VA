@@ -58,11 +58,12 @@ if __name__ == "__main__":
                 # obtener cada digito
                 centers = []
                 if contours:
-                    x, y, w, h = cv2.boundingRect(max(contours, key=cv2.contourArea))
-                    digit = img_thresh[y:y+h, x:x+w]
-                    cx = x + w/2
-                    cy = y + h/2
-                    centers.append((cx, cy))
+                    for c in contours:
+                        x, y, w, h = cv2.boundingRect(c)
+                        digit = img_thresh[y:y+h, x:x+w]
+                        cx = x + w/2
+                        cy = y + h/2
+                        centers.append((cx, cy))
 
                 
                 # encontrar los caracteres alineados con RANSAC
@@ -110,23 +111,23 @@ if __name__ == "__main__":
                 
                 output_text = ""
                 for line in ordered_lines:
-                    if output_text != "":
-                        output_text += "+"
                     for (cx, cy) in line:
-                        # Extraer el dígito de la imagen original usando un recorte alrededor del centro
-                        x1 = int(cx - 12)
-                        y1 = int(cy - 12)
-                        x2 = int(cx + 12)
-                        y2 = int(cy + 12)
+                            # Extraer el dígito de la imagen original usando un recorte alrededor del centro
+                            x1 = max(0, int(cx - 12))
+                            y1 = max(0, int(cy - 12))
+                            x2 = min(img_thresh.shape[1], int(cx + 12))
+                            y2 = min(img_thresh.shape[0], int(cy + 12))
 
-                        digit_img = img_thresh[y1:y2, x1:x2]
+                            # Verificar que el recorte es válido
+                            if x2 > x1 and y2 > y1:
+                                digit_img = img_thresh[y1:y2, x1:x2]
 
-                        # Preprocesar el dígito para el clasificador
-                        digit_img_resized = cv2.resize(digit_img, (25, 25), interpolation=cv2.INTER_AREA)
+                                # Preprocesar el dígito para el clasificador
+                                digit_img_resized = cv2.resize(digit_img, (25, 25), interpolation=cv2.INTER_AREA)
 
-                        # Clasificar el dígito usando el OCR
-                        predicted_char = classifier.predict(digit_img_resized)
-                        output_text += str(predicted_char)
+                                # Clasificar el dígito usando el OCR
+                                predicted_char = classifier.predict(digit_img_resized)
+                                output_text += str(predicted_char)
                 
 
                 # Escribir en resultado.txt: nombre_fichero>;<x1>;<y1>;<x2>;<y2>;<tipo>;<score>;<texto_ocr>
@@ -136,7 +137,17 @@ if __name__ == "__main__":
                 score = 1 # calcular  
 
                 linea = f"{img_name};{int(x1)};{int(y1)};{int(x2)};{int(y2)};tipo?;{score:.2f};{output_text}\n"
-                f_res.write(linea)
+                f_res.write(linea)# Archivo de depuración opcional
+                with open("debug_panels.txt", "a") as f_debug:
+                    f_debug.write(f"Panel: {img_name}\n")
+                    f_debug.write(f"  Líneas detectadas: {len(ordered_lines)}\n")
+
+                    for i, line in enumerate(ordered_lines):
+                        f_debug.write(f"    Línea {i+1}: {len(line)} caracteres\n")
+
+                    f_debug.write(f"  OCR final: {output_text}\n")
+                    f_debug.write("-" * 40 + "\n")
+
 
 
                 
