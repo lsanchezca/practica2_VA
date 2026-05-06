@@ -37,64 +37,109 @@ if __name__ == "__main__":
 
 
     # Create the OCR classifier
-    classifier = NRKnnClassifier((25,25))
+    classifier = NRKnnClassifier((25,25), simple_preprocess=True)
     classifier.train(training_images)
 
 
     # Load testing data
     if args.test_path:
         # Obtenemos lista de imágenes .png del directorio de test
-        test_images = [f for f in os.listdir(args.test_path) if f.endswith('.png')]
+        debug_lines_dir = os.path.join("outputs_classifier", "debug_lines")
+        os.makedirs(debug_lines_dir, exist_ok=True)
+
+        # Solo imágenes de entrada reales (evita procesar lines_*.png)
+        test_images = [
+            f for f in os.listdir(args.test_path)
+            if f.endswith(".png") and not f.startswith("lines_")
+        ]
         with open("resultado.txt", "w") as f_res:
             for img_name in test_images:
                 img_path = os.path.join(args.test_path, img_name)
                 img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+                img_blur = cv2.GaussianBlur(img, (3, 3), 0)
                 # umbralizacion
-                _, img_thresh = cv2.threshold(img, 128, 255, cv2.THRESH_BINARY_INV)
-                # Redimensionar a 25x25
-                img_resized = cv2.resize(img_thresh, (25, 25), interpolation=cv2.INTER_AREA)
+                img_thresh = cv2.adaptiveThreshold(img_blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 31, 11)
+
                 contours, _ = cv2.findContours(img_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-                # obtener cada digito
-                centers = []
-                if contours:
-                    for c in contours:
-                        x, y, w, h = cv2.boundingRect(c)
-                        digit = img_thresh[y:y+h, x:x+w]
-                        cx = x + w/2
-                        cy = y + h/2
-                        centers.append((cx, cy))
+                                # obtener cada digito
+                H, W = img.shape[:2]
+                char_boxes = []
+                for c in contours:
+                    x, y, w, h = cv2.boundingRect(c)
+                    area = w * h
+                    ar = w / float(h)
 
-                
+                    if area < 20:
+                        continue
+                    if h < 8 or w < 2:
+                        continue
+                    if h > 0.45 * H or w > 0.45 * W:
+                        continue
+                    if ar < 0.08 or ar > 1.8:
+                        continue
+
+                    cx = x + w / 2.0
+                    cy = y + h / 2.0
+                    char_boxes.append((x, y, w, h, cx, cy))
+
+
                 # encontrar los caracteres alineados con RANSAC
-                lines = []
-                remaining = np.array(centers)
+                lines_idx = []
+            remaining = np.arange(len(char_boxes))
 
-                ransac = linear_model.RANSACRegressor()
+            heights = np.array([b[3] for b in char_boxes], dtype=np.float32)
+            med_h = float(np.median(heights)) if len(heights) else 12.0
 
-                while len(remaining) > 2:
+            # RANSAC para líneas con >=3 caracteres
+            if len(remaining) >= 3:
+                ransac = linear_model.RANSACRegressor(
+                    residual_threshold=max(3.0, 0.45 * med_h),
+                    random_state=0
+                )
 
-                    X = remaining[:,0].reshape(-1,1)   # coordenadas x
-                    y = remaining[:,1]                 # coordenadas y
+                while len(remaining) >= 3:
+                    pts = np.array([[char_boxes[i][4], char_boxes[i][5]] for i in remaining], dtype=np.float32)
+                    X = pts[:, 0].reshape(-1, 1)
+                    y_r = pts[:, 1]
 
-                    ransac.fit(X, y)
-
+                    ransac.fit(X, y_r)
                     inliers = ransac.inlier_mask_
-                    line_points = remaining[inliers]   # centros de la línea detectada
 
-                    lines.append(line_points)
+                    if np.sum(inliers) < 3:
+                        break
 
-                        # quitar los puntos ya usados
+                    lines_idx.append(remaining[inliers].tolist())
                     remaining = remaining[~inliers]
-                
+            else:
+                remaining = np.arange(len(char_boxes))
+
+            # Fallback: agrupar por Y para líneas cortas (1-2 caracteres)
+            if len(remaining) > 0:
+                rem_sorted = sorted(remaining.tolist(), key=lambda i: char_boxes[i][5])
+                clusters = []
+                for idx in rem_sorted:
+                    cy = char_boxes[idx][5]
+                    placed = False
+                    for cl in clusters:
+                        mean_y = np.mean([char_boxes[j][5] for j in cl])
+                        if abs(cy - mean_y) <= 0.8 * med_h:
+                            cl.append(idx)
+                            placed = True
+                            break
+                    if not placed:
+                        clusters.append([idx])
+
+                lines_idx.extend(clusters)
 
                 # Dibujar las líneas detectadas
                 img_color = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-                for line in lines:
-                    for (cx, cy) in line:
+                for line_idx in lines_idx:
+                    for i in line_idx:
+                        x, y, w, h, cx, cy = char_boxes[i]
                         cv2.circle(img_color, (int(cx), int(cy)), 5, (0, 255, 0), -1)
                         # Guardar la imagen con las líneas detectadas
-                        output_path = os.path.join(args.test_path, f"lines_{img_name}")
+                        output_path = os.path.join(debug_lines_dir, f"lines_{img_name}")
                         cv2.imwrite(output_path, img_color)
                 
             
@@ -102,33 +147,29 @@ if __name__ == "__main__":
                 # Ejecutar clasificador OCR sobre cada dígito detectado en orden
 
                 # ordenar lineas por coordenada y (de arriba a abajo)
-                lines.sort(key=lambda line: np.mean(line[:,1]))
+                # Orden de lectura: arriba->abajo y dentro de línea izquierda->derecha
+                lines_idx.sort(key=lambda ln: np.mean([char_boxes[i][5] for i in ln]))
 
-                ordered_lines = []
-                for line in lines:
-                    line_sorted = sorted(line, key=lambda p: p[0])   # ordenar por X
-                    ordered_lines.append(line_sorted)
-                
-                output_text = ""
-                for line in ordered_lines:
-                    for (cx, cy) in line:
-                            # Extraer el dígito de la imagen original usando un recorte alrededor del centro
-                            x1 = max(0, int(cx - 12))
-                            y1 = max(0, int(cy - 12))
-                            x2 = min(img_thresh.shape[1], int(cx + 12))
-                            y2 = min(img_thresh.shape[0], int(cy + 12))
+                line_texts = []
+                for ln in lines_idx:
+                    ln_sorted = sorted(ln, key=lambda i: char_boxes[i][4])
+                    chars = []
+                    for i in ln_sorted:
+                        x, y, w, h, _, _ = char_boxes[i]
 
-                            # Verificar que el recorte es válido
-                            if x2 > x1 and y2 > y1:
-                                digit_img = img_thresh[y1:y2, x1:x2]
+                        # IMPORTANTe: recorte real por bounding box, no recorte fijo por centro
+                        char_img = img[y:y+h, x:x+w]
 
-                                # Preprocesar el dígito para el clasificador
-                                digit_img_resized = cv2.resize(digit_img, (25, 25), interpolation=cv2.INTER_AREA)
+                        pred_label = classifier.predict(char_img)
+                        pred_char = classifier.label2char(pred_label)
+                        chars.append(pred_char)
 
-                                # Clasificar el dígito usando el OCR
-                                predicted_char = classifier.predict(digit_img_resized)
-                                output_text += str(predicted_char)
-                
+                    if chars:
+                        line_texts.append("".join(chars))
+
+                # Formato pedido en el enunciado: líneas separadas por +
+                output_text = "+".join(line_texts)
+                                
 
                 # Escribir en resultado.txt: nombre_fichero>;<x1>;<y1>;<x2>;<y2>;<tipo>;<score>;<texto_ocr>
                 h, w = img.shape[:2]
@@ -137,17 +178,17 @@ if __name__ == "__main__":
                 score = 1 # calcular  
 
                 linea = f"{img_name};{int(x1)};{int(y1)};{int(x2)};{int(y2)};tipo?;{score:.2f};{output_text}\n"
-                f_res.write(linea)# Archivo de depuración opcional
-                with open("debug_panels.txt", "a") as f_debug:
-                    f_debug.write(f"Panel: {img_name}\n")
-                    f_debug.write(f"  Líneas detectadas: {len(ordered_lines)}\n")
+                f_res.write(linea)
 
-                    for i, line in enumerate(ordered_lines):
-                        f_debug.write(f"    Línea {i+1}: {len(line)} caracteres\n")
+                with open("debug_panels.txt", "a", encoding="utf-8") as f_debug:
+                    f_debug.write(f"Panel: {img_name}\n")
+                    f_debug.write(f"  Lineas detectadas: {len(lines_idx)}\n")
+
+                    for i, line_idx in enumerate(lines_idx):
+                        f_debug.write(f"    Linea {i+1}: {len(line_idx)} caracteres\n")
 
                     f_debug.write(f"  OCR final: {output_text}\n")
                     f_debug.write("-" * 40 + "\n")
-
 
 
                 

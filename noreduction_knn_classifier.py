@@ -12,31 +12,28 @@ from skimage.feature import hog
 
 
 class NRKnnClassifier(OCRClassifier):
-    def __init__(self, ocr_char_size):
+    def __init__(self, ocr_char_size, simple_preprocess=False):
         super().__init__(ocr_char_size)
         self.scaler = None
         self.knn = None
+        self.simple_preprocess = simple_preprocess
     
 
     def preprocess(self, img):
-        # Adaptative thresholding
-        img = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-
-
-        # Contours
-        contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        # bounding Rect
-        if contours:
-            x, y, w, h = cv2.boundingRect(max(contours, key=cv2.contourArea))
-            img = img[y:y+h, x:x+w]
+        if self.simple_preprocess:
+            # Preprocesamiento simple
+            img = cv2.threshold(img, 128, 255, cv2.THRESH_BINARY)[1]
+            img = cv2.resize(img, (25, 25))
+        else:
+            # Preprocesamiento original (complejo)
+            img = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+            contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if contours:
+                x, y, w, h = cv2.boundingRect(max(contours, key=cv2.contourArea))
+                img = img[y:y+h, x:x+w]
+            img = cv2.resize(img, (25, 25))
         
-        # img = hog(img, pixels_per_cell=(8,8), cells_per_block=(3,3), feature_vector=True) # Extract HOG features
-        # return img
-        img = cv2.resize(img, (25,25))
-
-        return img.flatten() # Return the feature vector (e.g., pixel values, HOG features, etc.) as a 1D array
-
+        return img.flatten()
 
 
     def train(self, images_dict):
