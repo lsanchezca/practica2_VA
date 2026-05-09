@@ -20,20 +20,55 @@ class NRKnnClassifier(OCRClassifier):
     
 
     def preprocess(self, img):
-        if self.simple_preprocess:
-            # Preprocesamiento simple
-            img = cv2.threshold(img, 128, 255, cv2.THRESH_BINARY)[1]
-            img = cv2.resize(img, (25, 25))
-        else:
-            # Preprocesamiento original (complejo)
-            img = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-            contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            if contours:
-                x, y, w, h = cv2.boundingRect(max(contours, key=cv2.contourArea))
-                img = img[y:y+h, x:x+w]
-            img = cv2.resize(img, (25, 25))
+        """
+        Preprocesamiento avanzado: detecta polaridad, umbraliza, extrae el carácter
+        y lo redimensiona MANTENIENDO la relación de aspecto y centrándolo.
+        """
+        # 1. Detectar polaridad de forma robusta mirando los bordes
+        # El fondo siempre está en los bordes del recorte.
+        h_img, w_img = img.shape[:2]
+        border_mean = (np.mean(img[0, :]) + np.mean(img[-1, :]) + 
+                       np.mean(img[:, 0]) + np.mean(img[:, -1])) / 4
         
-        return img.flatten()
+        if border_mean > 127:
+            # Fondo claro (letras negras - entrenamiento)
+            thresh_type = cv2.THRESH_BINARY_INV
+        else:
+            # Fondo oscuro (letras blancas - paneles)
+            thresh_type = cv2.THRESH_BINARY
+
+        # 2. Umbralización de Otsu para obtener el carácter en blanco (255)
+        _, img_bin = cv2.threshold(img, 0, 255, thresh_type + cv2.THRESH_OTSU)
+
+        # 3. Localizar el carácter (contornos)
+        contours, _ = cv2.findContours(img_bin, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        if not contours:
+            return np.zeros(self.ocr_char_size[0] * self.ocr_char_size[1], dtype=np.float32)
+
+        # Nos quedamos con el contorno más grande
+        c = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(c)
+        char_crop = img_bin[y:y+h, x:x+w]
+        
+        # 4. Redimensionar manteniendo relación de aspecto
+        target_w, target_h = self.ocr_char_size
+        margin = 2
+        max_size = target_w - 2 * margin
+        
+        f = max_size / max(w, h)
+        new_w, new_h = int(w * f), int(h * f)
+        new_w, new_h = max(1, new_w), max(1, new_h)
+        
+        char_resized = cv2.resize(char_crop, (new_w, new_h), interpolation=cv2.INTER_LANCZOS4)
+        
+        # 5. Centrar en un lienzo negro de forma robusta
+        canvas = np.zeros((target_h, target_w), dtype=np.uint8)
+        off_x = (target_w - new_w) // 2
+        off_y = (target_h - new_h) // 2
+        canvas[off_y:off_y+new_h, off_x:off_x+new_w] = char_resized
+        
+        return canvas.flatten().astype(np.float32)
 
 
     def train(self, images_dict):
@@ -74,7 +109,8 @@ class NRKnnClassifier(OCRClassifier):
     
 
     def predict(self, img):
-        features = self.preprocess(img) # Extract features from the image (e.g., pixel values, HOG, etc.)
-        features_lda = self.scaler.transform([features]).astype(np.float32)  # Transformar usando LDA
-        ret, result, neighbours, dist = self.knn.findNearest(features_lda, k=3)  # Predecir usando KNN
+        features = self.preprocess(img) 
+        # Escalar las características usando el scaler entrenado
+        features_scaled = self.scaler.transform([features]).astype(np.float32)  
+        ret, result, neighbours, dist = self.knn.findNearest(features_scaled, k=3) 
         return int(result[0][0])  # Devolver la etiqueta predicha como entero

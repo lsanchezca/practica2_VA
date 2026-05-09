@@ -17,20 +17,46 @@ class PcaKnnClassifier(OCRClassifier):
     
 
     def preprocess(self, img):
-        # Adaptative thresholding
-        img = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-
-
-        # Contours
-        contours, _ = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        # bounding Rect
-        if contours:
-            x, y, w, h = cv2.boundingRect(max(contours, key=cv2.contourArea))
-            img = img[y:y+h, x:x+w]
+        """
+        Preprocesamiento avanzado: detecta polaridad, umbraliza con Otsu, 
+        extrae el carácter y lo redimensiona centrándolo.
+        """
+        # 1. Detectar polaridad de forma robusta mirando los bordes
+        h_img, w_img = img.shape[:2]
+        border_mean = (np.mean(img[0, :]) + np.mean(img[-1, :]) + 
+                       np.mean(img[:, 0]) + np.mean(img[:, -1])) / 4
         
-        img = hog(img, pixels_per_cell=(8,8), cells_per_block=(3,3), feature_vector=True) # Extract HOG features
-        return img
+        if border_mean > 127:
+            thresh_type = cv2.THRESH_BINARY_INV
+        else:
+            thresh_type = cv2.THRESH_BINARY
+
+        # 2. Umbralización de Otsu
+        _, img_bin = cv2.threshold(img, 0, 255, thresh_type + cv2.THRESH_OTSU)
+
+        # 3. Localizar el carácter (contornos)
+        contours, _ = cv2.findContours(img_bin, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        if not contours:
+            return np.zeros(self.ocr_char_size[0] * self.ocr_char_size[1], dtype=np.float32)
+
+        c = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(c)
+        char_crop = img_bin[y:y+h, x:x+w]
+        
+        # 4. Redimensionar manteniendo relación de aspecto y centrar
+        target_w, target_h = self.ocr_char_size
+        margin = 2
+        max_size = target_w - 2 * margin
+        f = max_size / max(w, h)
+        new_w, new_h = max(1, int(w * f)), max(1, int(h * f))
+        char_resized = cv2.resize(char_crop, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        
+        canvas = np.zeros((target_h, target_w), dtype=np.uint8)
+        canvas[(target_h-new_h)//2 : (target_h-new_h)//2 + new_h, 
+               (target_w-new_w)//2 : (target_w-new_w)//2 + new_w] = char_resized
+        
+        return canvas.flatten().astype(np.float32)
 
 
     def train(self, images_dict):

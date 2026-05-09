@@ -67,8 +67,9 @@ def load_char_images(char_path, target_size=(25, 25)):
                 # Leer la imagen en escala de grises
                 img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
                 if img is not None:
-                    # Redimensionar al tamaño objetivo
-                    img = cv2.resize(img, target_size)
+                    # Redimensionar al tamaño objetivo si se especifica
+                    if target_size is not None:
+                        img = cv2.resize(img, target_size)
                     images.append(img)
             except Exception as e:
                 print(f"Error al cargar {img_path}: {e}")
