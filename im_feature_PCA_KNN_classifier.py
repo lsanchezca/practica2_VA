@@ -19,12 +19,12 @@ class PcaKnnClassifier(OCRClassifier):
     def preprocess(self, img):
         """
         Preprocesamiento avanzado: detecta polaridad, umbraliza con Otsu, 
-        extrae el carácter y lo redimensiona centrándolo.
+        extrae el carácter y lo redimensiona. Extrae características HOG.
         """
         # 1. Detectar polaridad de forma robusta mirando los bordes
         h_img, w_img = img.shape[:2]
         border_mean = (np.mean(img[0, :]) + np.mean(img[-1, :]) + 
-                       np.mean(img[:, 0]) + np.mean(img[:, -1])) / 4
+                    np.mean(img[:, 0]) + np.mean(img[:, -1])) / 4
         
         if border_mean > 127:
             thresh_type = cv2.THRESH_BINARY_INV
@@ -38,25 +38,25 @@ class PcaKnnClassifier(OCRClassifier):
         contours, _ = cv2.findContours(img_bin, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
         if not contours:
-            return np.zeros(self.ocr_char_size[0] * self.ocr_char_size[1], dtype=np.float32)
+            # Vector HOG de ceros si no hay contornos
+            hog_features = hog(np.zeros(self.ocr_char_size, dtype=np.uint8), 
+                            orientations=8, pixels_per_cell=(4, 4), 
+                            cells_per_block=(2, 2))
+            return hog_features.astype(np.float32)
 
         c = max(contours, key=cv2.contourArea)
         x, y, w, h = cv2.boundingRect(c)
         char_crop = img_bin[y:y+h, x:x+w]
         
-        # 4. Redimensionar manteniendo relación de aspecto y centrar
+        # 4. Redimensionar a tamaño fijo
         target_w, target_h = self.ocr_char_size
-        margin = 2
-        max_size = target_w - 2 * margin
-        f = max_size / max(w, h)
-        new_w, new_h = max(1, int(w * f)), max(1, int(h * f))
-        char_resized = cv2.resize(char_crop, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        char_resized = cv2.resize(char_crop, (target_w, target_h))
         
-        canvas = np.zeros((target_h, target_w), dtype=np.uint8)
-        canvas[(target_h-new_h)//2 : (target_h-new_h)//2 + new_h, 
-               (target_w-new_w)//2 : (target_w-new_w)//2 + new_w] = char_resized
+        # 5. Extraer características HOG (~ 144-200 features)
+        hog_features = hog(char_resized, orientations=8, pixels_per_cell=(4, 4), 
+                        cells_per_block=(2, 2))
         
-        return canvas.flatten().astype(np.float32)
+        return hog_features.astype(np.float32)
 
 
     def train(self, images_dict):

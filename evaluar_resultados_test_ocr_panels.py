@@ -1,7 +1,12 @@
 import csv
 import math
-import matplotlib.pyplot as plt
 import numpy as np
+import tkinter as tk
+from tkinter import filedialog
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
 
 
 def read_csv_file(file, delim=";"):
@@ -82,6 +87,7 @@ def plot_recognition_distance(p_gt, p):
     plt.ylabel("Núm. imágenes")
     plt.xlabel('Distancia de edición (en "número de operaciones")')
     plt.show()
+    plt.savefig("hist_distance_levenshtein.png")
     print("hist=", hist)
     print("bin_edges=", bin_edges)
     print(hist[0:5].sum())
