@@ -47,7 +47,7 @@ if __name__ == "__main__":
         debug_lines_dir = os.path.join("outputs_classifier", "debug_lines")
         os.makedirs(debug_lines_dir, exist_ok=True)
 
-        # Solo imágenes de entrada reales (evita procesar lines_*.png)
+        # Solo imágenes de entrada reales
         test_images = [
             f for f in os.listdir(args.test_path)
             if f.endswith(".png") and not f.startswith("lines_")
@@ -157,7 +157,7 @@ if __name__ == "__main__":
                     for i in ln_sorted:
                         x, y, w, h, _, _ = char_boxes[i]
 
-                        # IMPORTANTe: recorte real por bounding box, no recorte fijo por centro
+                        # Recorte real por bounding box, no recorte fijo por centro
                         char_img = img[y:y+h, x:x+w]
 
                         pred_label = classifier.predict(char_img)
@@ -190,41 +190,3 @@ if __name__ == "__main__":
 
                     f_debug.write(f"  OCR final: {output_text}\n")
                     f_debug.write("-" * 40 + "\n")
-
-
-                
-
-
-
-            
-
-
-
-            
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-    
-
-
-    # Evaluate OCR over road panels
-
-
-
-
-
